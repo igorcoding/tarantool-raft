@@ -52,8 +52,7 @@ function M:_init(cfg)
 		-- self._pool.on_disconnect = bind(self._pool_on_disconnect, self)
 	end
 	
-	self.pool = {}
-	self:pool_init_functions()
+	self.pool = self:_pool_init_functions()
 	
 	self.nodes_uuid_to_peer = {}
 	
@@ -274,14 +273,16 @@ end
 
 ---------------- pool functions ----------------
 
-function M:pool_init_functions()
+function M:_pool_init_functions()
+	local pool = {}
 	if self.mode == self.MODES.EMBEDDED then
-		self.pool.eval = bind(self.pool_eval_embedded, self)
-		self.pool.call = bind(self.pool_call_embedded, self)
+		pool.eval = bind(self.pool_eval_embedded, self)
+		pool.call = bind(self.pool_call_embedded, self)
 	else
-		self.pool.eval = bind(self.pool_eval_standalone, self)
-		self.pool.call = bind(self.pool_call_standalone, self)
+		pool.eval = bind(self.pool_eval_standalone, self)
+		pool.call = bind(self.pool_call_standalone, self)
 	end
+	return pool
 end
 
 function M:pool_eval_embedded(...)
