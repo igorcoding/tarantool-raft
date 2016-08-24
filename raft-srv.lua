@@ -136,7 +136,7 @@ function M:_make_global_funcs(func_names)
 		_G.raft = {}
 	end
 	if _G.raft[self.name] ~= nil then
-		log.warn("Another raft." .. self.name .. " callbacks detected in _G. Replacing them.")
+		log.warn("[raft-srv] Another raft." .. self.name .. " callbacks detected in _G. Replacing them.")
 	end
 	_G.raft[self.name] = {}
 	for _,f in ipairs(func_names) do
@@ -144,7 +144,7 @@ function M:_make_global_funcs(func_names)
 			_G.raft[self.name][f] = bind(self[f], self)
 			F[f] = 'raft.' .. self.name .. '.' .. f
 		else
-			log.warn("No function '" .. f .. "' found. Skipping...")
+			log.warn("[raft-srv] No function '" .. f .. "' found. Skipping...")
 		end
 	end
 	return F
@@ -154,7 +154,7 @@ function M:_set_state(new_state)
 	if new_state ~= self.state then
 		self.prev_state = self.state
 		self.state = new_state
-		log.info("State: %s -> %s", self.prev_state, self.state)
+		log.info("[raft-srv] State: %s -> %s", self.prev_state, self.state)
 		for _,v in pairs(self._internal_state_channels) do
 			v:put('state_change')
 		end
@@ -179,9 +179,9 @@ function M:_set_leader(new_leader)
 end
 
 function M:start()
-	log.info("Starting raft...")
+	log.info("[raft-srv] Starting raft...")
 	if self.mode == self.MODES.STANDALONE then
-		log.info("Connecting to pool...")
+		log.info("[raft-srv] Connecting to pool...")
 		self._pool:connect()
 	end
 	
@@ -221,7 +221,7 @@ function M:start_election_timer()
 				-- log.info('Waiting elections for %fs', timeout)
 				local v = self._election.ch:get(timeout)
 				if v == nil then
-					if self.debug then log.info("Timeout exceeded. Starting elections.") end
+					if self.debug then log.info("[raft-srv] Timeout exceeded. Starting elections.") end
 					
 					self._election.process_fiber = fiber.create(self._initiate_elections, self)
 					self._election.process_fiber:name('election_process_fiber')
@@ -280,12 +280,12 @@ function M:_is_good_for_candidate()
 		if success then
 			-- print(yaml.encode(resp))
 			if resp.replication.status ~= 'off' and resp.replication.lag ~= nil then
-				if self.debug then log.info("[lag] id = %d; uuid = %s; lag = %f", resp.server.id, resp.server.uuid, resp.replication.lag) end
+				if self.debug then log.info("[raft-srv][lag] id = %d; uuid = %s; lag = %f", resp.server.id, resp.server.uuid, resp.replication.lag) end
 				if self.debug then
-					log.info("[lag] condition1: %d", minimum.lag == nil and 1 or 0)
+					log.info("[raft-srv][lag] condition1: %d", minimum.lag == nil and 1 or 0)
 					if minimum.lag ~= nil then
-						log.info("[lag] condition2: %d", (resp.replication.lag <= minimum.lag and resp.server.uuid == self.uuid) and 1 or 0)
-						log.info("[lag] condition3: %d", resp.replication.lag < minimum.lag and 1 or 0)
+						log.info("[raft-srv][lag] condition2: %d", (resp.replication.lag <= minimum.lag and resp.server.uuid == self.uuid) and 1 or 0)
+						log.info("[raft-srv][lag] condition3: %d", resp.replication.lag < minimum.lag and 1 or 0)
 					end
 				end
 				if minimum.lag == nil or (resp.replication.lag <= minimum.lag and resp.server.uuid == self.uuid) or resp.replication.lag < minimum.lag then
@@ -294,14 +294,14 @@ function M:_is_good_for_candidate()
 				end
 			end
 		else
-			log.warn('Error whlie determining a good candidate for node %s: %s', node_uuid, resp)
+			log.warn('[raft-srv] Error whlie determining a good candidate for node %s: %s', node_uuid, resp)
 		end
 	end
 	if self.debug then
 		if minimum.lag ~= nil then
-			log.info("[lag] minimum = {uuid=%s; lag=%d}", minimum.uuid, minimum.lag)
+			log.info("[raft-srv][lag] minimum = {uuid=%s; lag=%d}", minimum.uuid, minimum.lag)
 		else
-			log.info("[lag] lag couldn't been determined. uuid = ", minimum.uuid)
+			log.info("[raft-srv][lag] lag couldn't been determined. uuid = ", minimum.uuid)
 		end
 	end
 	
@@ -316,17 +316,17 @@ function M:_initiate_elections()
 	self:_set_leader(msgpack.NULL)
 	
 	if not self:_is_good_for_candidate() then
-		if self.debug then log.info("node %s is not good to be a candidate", self.uuid) end
+		if self.debug then log.info("[raft-srv] node %s is not good to be a candidate", self.uuid) end
 		self:start_election_timer()
 		return
 	else
 		if self.debug then
-			log.ifo("node %s is good to be a candidate. Active nodes = %d. Nodes count = %d", self.uuid, self.active_nodes_count, self._nodes_count)
+			log.ifo("[raft-srv] node %s is good to be a candidate. Active nodes = %d. Nodes count = %d", self.uuid, self.active_nodes_count, self._nodes_count)
 		end
 	end
 	
 	if self._nodes_count ~= 1 and self.active_nodes_count == 1 then
-		log.info("node %s is left by itself", self.uuid)
+		log.info("[raft-srv] node %s is left by itself", self.uuid)
 		self:_set_state(self.S.IDLE)
 		self:start_election_timer()
 		return
@@ -350,11 +350,11 @@ function M:_initiate_elections()
 		end
 	end
 	
-	if self.debug then log.info("resulting votes count: %d/%d", self._vote_count, self._nodes_count) end
+	if self.debug then log.info("[raft-srv] resulting votes count: %d/%d", self._vote_count, self._nodes_count) end
 	
 	if self._vote_count > self._nodes_count / 2 then
 		-- elections won
-		if self.debug then log.info("node %d won elections [uuid = %s]", self.id, self.uuid) end
+		if self.debug then log.info("[raft-srv] node %d won elections [uuid = %s]", self.id, self.uuid) end
 		self:_set_state(self.S.LEADER)
 		self:_set_leader({ id=self.id, uuid=self.uuid })
 		self._vote_count = 0
@@ -362,7 +362,7 @@ function M:_initiate_elections()
 		self:start_heartbeater()
 	else
 		-- elections lost
-		if self.debug then log.info("node %d lost elections [uuid = %s]", self.id, self.uuid) end
+		if self.debug then log.info("[raft-srv] node %d lost elections [uuid = %s]", self.id, self.uuid) end
 		self.term = self.term - 1
 		self:_set_state(self.S.IDLE)
 		self:_set_leader(msgpack.NULL)
@@ -379,7 +379,7 @@ function M:start_heartbeater()
 			
 			self._heartbeat.active = true
 			while self._heartbeat.active do
-				if self.debug then log.info("performing heartbeat") end
+				if self.debug then log.info("[raft-srv] performing heartbeat") end
 				fiber.create(function(self)  -- don't wait for heartbeat to finish!
 					local r = self.pool.call(self.FUNC.heartbeat, self.term, self.uuid, self.leader)
 				end, self)
@@ -406,7 +406,7 @@ end
 
 function M:start_debugger()
 	local logger = function()
-		local s = "state=%s; term=%d; id=%d; uuid=%s; leader=%s"
+		local s = "[raft-srv] state=%s; term=%d; id=%d; uuid=%s; leader=%s"
 		local _nil = "nil"
 		local leader_str = _nil
 		if self.leader ~= nil then
@@ -443,7 +443,7 @@ function M:call_on_leader(func_name, ...)
 		local c = self.leader_node.conn
 		return c:call(func_name, ...)
 	else
-		log.error('leader_node is nil!')
+		log.error('[raft-srv] leader_node is nil!')
 		return nil
 	end
 end
@@ -452,7 +452,7 @@ function M:get_info(uuid)
 	while true do
 		local node = self._pool:get_by_uuid(uuid)
 		if node == nil then
-			log.warn("[get_info] Lost node with uuid: %s", uuid)
+			log.warn("[raft-srv][get_info] Lost node with uuid: %s", uuid)
 			break
 		end
 		local r, e = pcall(node.conn.call, node.conn, self.FUNC.info)
@@ -460,7 +460,7 @@ function M:get_info(uuid)
 			local response = e[1][1]
 			return response
 		else
-			log.warn("Error while info on node %s. %s:%s", uuid, r, e)
+			log.warn("[raft-srv] Error while info on node %s. %s:%s", uuid, r, e)
 			fiber.sleep(0.1)
 		end
 	end
@@ -486,7 +486,7 @@ end
 
 function M:start_state_wait(uuid)
 	if uuid == nil then
-		log.error('Tried to start state_wait on nil uuid')
+		log.error('[raft-srv] Tried to start state_wait on nil uuid')
 		return
 	end
 	
@@ -501,7 +501,7 @@ function M:start_state_wait(uuid)
 			if self.debug then log.info('[raft-srv] Sending state_wait for node %s', uuid) end
 			local node = self._pool:get_by_uuid(uuid)
 			if node == nil then
-				log.warn("[state_wait] Lost node with uuid: %s", uuid)
+				log.warn("[raft-srv][state_wait] Lost node with uuid: %s", uuid)
 				break
 			end
 			local r, e = pcall(node.conn.call, node.conn, self.FUNC.state_wait, self._state_wait.timeout)
@@ -513,7 +513,7 @@ function M:start_state_wait(uuid)
 
 				self:_update_nodes_stat(node, new_info)
 			else
-				log.warn("Error while state_wait. %s:%s", r, e)
+				log.warn("[raft-srv] Error while state_wait on node %s. %s:%s", uuid, r, e)
 			end
 		end
 		
@@ -552,7 +552,7 @@ function M:request_vote(term, uuid)
 		end
 	end
 	
-	if self.debug then log.info("--> request_vote: term = %d; uuid = %s; res = %s", term, uuid, res) end
+	if self.debug then log.info("[raft-srv] --> request_vote: term = %d; uuid = %s; res = %s", term, uuid, res) end
 	return res
 end
 
@@ -567,7 +567,7 @@ function M:heartbeat(term, uuid, leader)
 		self.term = term
 		self:_set_leader(leader)
 		self._preferred_leader_uuid = msgpack.NULL
-		if self.debug then log.info("--> heartbeat: term = %d; uuid = %s; leader_id = %d;", term, uuid, leader.id) end
+		if self.debug then log.info("[raft-srv] --> heartbeat: term = %d; uuid = %s; leader_id = %d;", term, uuid, leader.id) end
 	end
 	return "ack"
 end
@@ -627,7 +627,7 @@ function M:state_wait(timeout)
 		event = m
 	end
 	
-	if self.debug then log.info("--> state_wait()") end
+	if self.debug then log.info("[raft-srv] --> state_wait()") end
 	local data = {
 		event = event,
 		state = self.state,

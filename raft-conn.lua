@@ -70,7 +70,9 @@ function M:_init(cfg)
 end
 
 function M:start()
+	log.info("[raft-conn] Starting raft...")
 	if self.mode == self.MODES.STANDALONE then
+		log.info("[raft-conn] Connecting to pool...")
 		self._pool:connect()
 	end
 end
@@ -80,7 +82,7 @@ function M:get_info(uuid)
 	while true do
 		local node = self._pool:get_by_uuid(uuid)
 		if node == nil then
-			log.warn("[get_info] Lost node with uuid: %s", uuid)
+			log.warn("[raft-conn][get_info] Lost node with uuid: %s", uuid)
 			break
 		end
 		local r, e = pcall(node.conn.call, node.conn, self:_raft_func('info'))
@@ -88,7 +90,7 @@ function M:get_info(uuid)
 			local response = e[1][1]
 			return response
 		else
-			log.warn("Error while info on node %s. %s:%s", uuid, r, e)
+			log.warn("[raft-conn] Error while info on node %s. %s:%s", uuid, r, e)
 			fiber.sleep(0.1)
 		end
 	end
@@ -102,7 +104,7 @@ function M:start_state_wait(uuid)
 			local srv = self.srvs[uuid]
 			local node = self._pool:get_by_uuid(uuid)
 			if node == nil then
-				log.warn("[state_wait] Lost node with uuid: %s", uuid)
+				log.warn("[raft-conn][state_wait] Lost node with uuid: %s", uuid)
 				break
 			end
 			local r, e = pcall(node.conn.call, node.conn, self:_raft_func('state_wait'), self.state_wait_timeout)
@@ -146,7 +148,7 @@ function M:start_state_wait(uuid)
 				
 				srv.info = new_info
 			else
-				log.warn("Error while state_wait. %s:%s", r, e)
+				log.warn("[raft-conn] Error while state_wait. %s:%s", r, e)
 				break
 			end
 		end
@@ -246,7 +248,7 @@ function M:get_leader_nodes()
 		if leader_node ~= nil then
 			table.insert(leaders, leader_node)
 		else
-			log.error('Lost leader node %s', leader_uuid)
+			log.error('[raft-conn] Lost leader node %s', leader_uuid)
 		end
 	end
 	return leaders
