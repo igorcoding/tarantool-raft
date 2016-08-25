@@ -119,7 +119,6 @@ function M:_init(cfg)
 	self.term = 0
 	self.prev_leader = msgpack.NULL
 	self.leader = msgpack.NULL
-	self.leader_node = msgpack.NULL
 	self.nodes_info = {}
 	for _, state in pairs(self.S) do
 		self.nodes_info[state] = {}
@@ -165,9 +164,6 @@ function M:_set_leader(new_leader)
 	if new_leader == nil or self.leader == nil or new_leader.uuid ~= self.leader.uuid then
 		self.prev_leader = self.leader
 		self.leader = new_leader
-		if self.leader ~= nil then
-			self.leader_node = self._pool:get_by_uuid(self.leader.uuid)
-		end
 		
 		if self.prev_leader ~= nil and self.leader ~= nil then
 			for _,v in pairs(self._internal_state_channels) do
@@ -439,9 +435,13 @@ function M:stop_debugger()
 end
 
 function M:call_on_leader(func_name, ...)
-	if self.leader_node ~= nil then
-		local c = self.leader_node.conn
-		return c:call(func_name, ...)
+	if self.leader == nil or self.leader.uuid == nil then
+		log.error('[raft-srv] Cannot call on leader, when leader == nil')
+	end
+	local node = self._pool:get_by_uuid(self.leader.uuid)
+	
+	if node ~= nil then
+		return node.conn:call(func_name, ...)
 	else
 		log.error('[raft-srv] leader_node is nil!')
 		return nil
@@ -588,13 +588,57 @@ function M:get_leaders_uuids()
 	return {}
 end
 
-function M:get_leader_nodes()
-	local leader = self.leader_node
-	if leader ~= nil then
-		return { leader }
+function M:get_nodes_by_state(state, nodes)
+	-- Get all nodes by state
+	local present_nodes = self.nodes_info[state]
+	if nodes == nil then
+		nodes = {}
 	end
-	return {}
+	for uuid, active in pairs(present_nodes) do
+		if active then
+			local node = self._pool:get_by_uuid(uuid)
+			if node ~= nil then
+				table.insert(nodes, node)
+			end
+		end
+	end
+	return nodes
 end
+
+function M:get_leader_nodes()
+	-- Get all nodes in state leader
+	return self:get_nodes_by_state(self.S.LEADER)
+end
+
+function M:get_follower_nodes()
+	-- Get all nodes in state follower
+	return self:get_nodes_by_state(self.S.FOLLOWER)
+end
+
+function M:get_aleader_nodes()
+	-- Get all nodes, but leaders first
+	local nodes = self:get_leader_nodes()
+	for _, state in pairs(self.S) do
+		if state ~= self.S.LEADER then
+			nodes = self:get_nodes_by_state(state, nodes)
+		end
+	end
+	return nodes
+end
+
+function M:get_afollower_nodes()
+	-- Get all nodes, but leaders first
+	local nodes = self:get_follower_nodes()
+	
+	for _, state in pairs(self.S) do
+		if state ~= self.S.FOLLOWER then
+			nodes = self:get_nodes_by_state(state, nodes)
+		end
+	end
+	return nodes
+end
+
+
 
 function M:info(pack_to_tuple)
 	if pack_to_tuple == nil then

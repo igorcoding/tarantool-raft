@@ -254,6 +254,53 @@ function M:get_leader_nodes()
 	return leaders
 end
 
+function M:get_nodes_by_state(state, nodes)
+	-- Get all nodes by state
+	local present_nodes = self.nodes_info[state]
+	if nodes == nil then
+		nodes = {}
+	end
+	for uuid, active in pairs(present_nodes) do
+		if active then
+			local node = self._pool:get_by_uuid(uuid)
+			if node ~= nil then
+				table.insert(nodes, node)
+			end
+		end
+	end
+	return nodes
+end
+
+function M:get_follower_nodes()
+	-- Get all nodes in state follower
+	return self:get_nodes_by_state(self.S.FOLLOWER)
+end
+
+function M:get_aleader_nodes()
+	-- Get all nodes, but leaders first
+	local nodes = self:get_leader_nodes()
+	for _, state in pairs(self.S) do
+		if state ~= self.S.LEADER then
+			nodes = self:get_nodes_by_state(state, nodes)
+		end
+	end
+	return nodes
+end
+
+function M:get_afollower_nodes()
+	-- Get all nodes, but leaders first
+	local nodes = self:get_follower_nodes()
+	
+	for _, state in pairs(self.S) do
+		if state ~= self.S.FOLLOWER then
+			nodes = self:get_nodes_by_state(state, nodes)
+		end
+	end
+	return nodes
+end
+
+
+
 
 function M:run_on_leaders(method, ...)
 	local peers = {}
