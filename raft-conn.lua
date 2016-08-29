@@ -56,6 +56,9 @@ function M:_init(cfg)
 	
 	self.nodes_uuid_to_peer = {}
 	
+	self.id = box.info.server.id
+	self.uuid = box.info.server.uuid
+	
 	self.srvs = {}
 	self.leaders = {}
 	self.leaders_total = 0
@@ -224,13 +227,30 @@ function M:_raft_func(func_name)
 end
 
 
-function M:info()
-	return box.tuple.new{{
+function M:is_leader(uuid)
+	if uuid == nil then
+		uuid = self.uuid
+	end
+	
+	return self.leaders_counts[uuid] and self.leaders_counts[uuid] > 0
+end
+
+function M:info(pack_to_tuple)
+	if pack_to_tuple == nil then
+		pack_to_tuple = true
+	end
+	local info = {
+		type = self.___name,
 		leaders = self.leaders,
 		leaders_total = self.leaders_total,
 		leaders_counts = self.leaders_counts,
 		srvs = self.srvs,
-	}}
+	}
+	if pack_to_tuple == true then
+		return box.tuple.new{info}
+	else
+		return info
+	end
 end
 
 function M:get_leaders_uuids()

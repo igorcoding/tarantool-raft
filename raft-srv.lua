@@ -572,8 +572,11 @@ function M:heartbeat(term, uuid, leader)
 	return "ack"
 end
 
-function M:is_leader()
-	return self.leader ~= nil and self.leader.uuid == self.uuid
+function M:is_leader(uuid)
+	if uuid == nil then
+		uuid = self.uuid
+	end
+	return self.leader ~= nil and self.leader.uuid == uuid
 end
 
 function M:get_leader()
@@ -645,6 +648,7 @@ function M:info(pack_to_tuple)
 		pack_to_tuple = true
 	end
 	local info = {
+		type = self.___name,
 		id = self.id,
 		uuid = self.uuid,
 		prev_state = self.prev_state,
