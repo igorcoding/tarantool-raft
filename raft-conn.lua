@@ -240,13 +240,13 @@ function M:info(pack_to_tuple)
 		pack_to_tuple = true
 	end
 	local info = {
-		type = self.___name,
+		['type'] = self.___name,
 		leaders = self.leaders,
 		leaders_total = self.leaders_total,
 		leaders_counts = self.leaders_counts,
 		srvs = self.srvs,
 	}
-	if pack_to_tuple == true then
+	if pack_to_tuple then
 		return box.tuple.new{info}
 	else
 		return info
